@@ -22,6 +22,7 @@ import com.horstmann.codecheck.Util;
 import models.JWT;
 import models.LTI;
 import models.S3Connection;
+import models.AssignmentConnector;
 import oauth.signpost.exception.OAuthCommunicationException;
 import oauth.signpost.exception.OAuthExpectationFailedException;
 import oauth.signpost.exception.OAuthMessageSignerException;
@@ -42,7 +43,7 @@ TODO: Can/should this be replaced with JWT?
 
 
 public class LTIAssignment extends Controller {
-    @Inject private S3Connection s3conn;
+    @Inject private AssignmentConnector s3conn;
     @Inject private LTI lti;
     @Inject private JWT jwt;
     private static Logger.ALogger logger = Logger.of("com.horstmann.codecheck");

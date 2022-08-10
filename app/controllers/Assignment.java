@@ -82,6 +82,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import models.S3Connection;
+import models.AssignmentConnector;
 import com.horstmann.codecheck.Util;
 import play.Logger;
 import play.mvc.Controller;
@@ -89,7 +90,7 @@ import play.mvc.Http;
 import play.mvc.Result;
 
 public class Assignment extends Controller {
-    @Inject private S3Connection s3conn;
+    @Inject private AssignmentConnector s3conn;
     private static Logger.ALogger logger = Logger.of("com.horstmann.codecheck");
     
     public static ArrayNode parseAssignment(String assignment) {
@@ -338,7 +339,7 @@ public class Assignment extends Controller {
      * Save existing: request.assignmentID, request.editKey exist
      * New or cloned: Neither request.assignmentID nor request.editKey exist
      */
-    public Result saveAssignment(Http.Request request) throws IOException {     
+    public Result saveAssignment(Http.Request request) throws IOException {    
         ObjectNode params = (ObjectNode) request.body().asJson();
 
         try {

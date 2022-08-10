@@ -24,13 +24,14 @@ import com.horstmann.codecheck.Util;
 import models.CodeCheck;
 import models.LTI;
 import models.S3Connection;
+import models.AssignmentConnector;
 import play.Logger;
 import play.mvc.Controller;
 import play.mvc.Http;
 import play.mvc.Result;
 
 public class LTIProblem extends Controller {
-    @Inject private S3Connection s3conn;
+    @Inject private AssignmentConnector s3conn;
     @Inject private LTI lti;
     @Inject private CodeCheck codeCheck;
     

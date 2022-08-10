@@ -38,7 +38,7 @@ import play.mvc.Http;
 
 @Singleton
 public class LTI {
-    @Inject private S3Connection s3conn;
+    @Inject private AssignmentConnector s3conn;
     private static Logger.ALogger logger = Logger.of("com.horstmann.codecheck");
     
     public boolean validate(Http.Request request) {
