@@ -7,6 +7,10 @@ import java.io.File;
 import java.io.FileWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.ByteBuffer;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -55,6 +59,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.typesafe.config.Config;
 
+import com.horstmann.codecheck.Util;
+
 import play.Logger;
 
 @Singleton
@@ -98,13 +104,11 @@ public class AssignmentConnector {
 
 interface AssignmentConnection {
     default ObjectNode readJsonObjectFromDynamoDB(String tableName, String primaryKeyName, String primaryKeyValue) throws IOException {
-        System.out.println("****Enter readJsonObjectFromDynamoDB");
         String result = readJsonStringFromDynamoDB(tableName, primaryKeyName, primaryKeyValue);
         return result == null ? null : (ObjectNode)(new ObjectMapper().readTree(result)); 
     }
     
     default ObjectNode readJsonObjectFromDynamoDB(String tableName, String primaryKeyName, String primaryKeyValue, String sortKeyName, String sortKeyValue) throws IOException {
-        System.out.println("****Enter readJsonObjectFromDynamoDB");
         String result = readJsonStringFromDynamoDB(tableName, primaryKeyName, primaryKeyValue, sortKeyName, sortKeyValue);
         return result == null ? null : (ObjectNode)(new ObjectMapper().readTree(result)); 
     }
@@ -254,10 +258,8 @@ class AssignmentLocalConnection implements AssignmentConnection {
     }
 
     public String readJsonStringFromDynamoDB(String tableName, String primaryKeyName, String primaryKeyValue) throws IOException {
-        System.out.println("****Enter readJsonStringFromDynamoDB");
         Path repoPath = Path.of(config.getString("com.horstmann.codecheck.db")).resolve(tableName);
-        Path jsonFile = repoPath.resolve(primaryKeyValue);
-        System.out.println("****Enter readJsonStringFromDynamoDB");
+        Path jsonFile = repoPath.resolve(primaryKeyValue.replaceAll("[^a-zA-Z0-9_-]", ""));
 
         try {
             String result = Files.readString(jsonFile);
@@ -270,7 +272,7 @@ class AssignmentLocalConnection implements AssignmentConnection {
 
     public String readJsonStringFromDynamoDB(String tableName, String primaryKeyName, String primaryKeyValue, String sortKeyName, String sortKeyValue) throws IOException {
         Path repoPath = Path.of(config.getString("com.horstmann.codecheck.db")).resolve(tableName);
-        Path jsonFile = repoPath.resolve(primaryKeyValue).resolve(sortKeyValue);
+        Path jsonFile = repoPath.resolve(primaryKeyValue.replaceAll("[^a-zA-Z0-9_-]", "")).resolve(sortKeyValue.replaceAll("[^a-zA-Z0-9_-]", ""));
 
         try {
             String result = Files.readString(jsonFile);
@@ -283,7 +285,7 @@ class AssignmentLocalConnection implements AssignmentConnection {
 
 
     public ObjectNode readNewestJsonObjectFromDynamoDB(String tableName, String primaryKeyName, String primaryKeyValue) {
-        Path repoPath = Path.of(config.getString("com.horstmann.codecheck.db")).resolve(primaryKeyName).resolve(primaryKeyValue);
+        Path repoPath = Path.of(config.getString("com.horstmann.codecheck.db")).resolve(primaryKeyName).resolve(primaryKeyValue.replaceAll("[^a-zA-Z0-9_-]", ""));
 
         try (Stream<Path> entries = Files.list(repoPath)) {
             Path latest = entries.filter(Files::isRegularFile).max(Path::compareTo).orElse(null);
@@ -303,7 +305,7 @@ class AssignmentLocalConnection implements AssignmentConnection {
     public Map<String, ObjectNode> readJsonObjectsFromDynamoDB(String tableName, String primaryKeyName, String primaryKeyValue, String sortKeyName) 
     throws IOException {
         Map<String, ObjectNode> itemMap = new HashMap<>();
-        Path pathToDirectory = Path.of(config.getString("com.horstmann.codecheck.db") + "/" + tableName + "/" + primaryKeyValue);
+        Path pathToDirectory = Path.of(config.getString("com.horstmann.codecheck.db") + "/" + tableName + "/" + primaryKeyValue.replaceAll("[^a-zA-Z0-9_-]", ""));
         try (Stream<Path> entries = Files.list(pathToDirectory)) {
             List<Path> files = entries.filter(Files::isRegularFile).collect(Collectors.toList());
             for (Path file : files) {
@@ -312,6 +314,7 @@ class AssignmentLocalConnection implements AssignmentConnection {
                 Object temp = parser.parse(fileData);
                 JSONObject jsonObject = (JSONObject) temp;   
                 String key = (String) jsonObject.get(sortKeyName);
+                System.out.println("Enter readJsonObjectsFromDynamoDB: key=" + key);
                 itemMap.put(key, (ObjectNode) (new ObjectMapper().readTree(jsonObject.toJSONString())));
             }
         }  catch (IOException | org.json.simple.parser.ParseException ex) {
@@ -322,7 +325,6 @@ class AssignmentLocalConnection implements AssignmentConnection {
     }
 
     public void writeJsonObjectToDynamoDB(String tableName, ObjectNode obj) {
-        System.out.println("****Enter writeJsonToFile");
         // Create a directory for the given table
         // E.g. if the key "com.horstmann.codecheck.db" has the value
         // "/opt/codecheck/db", then the directory created should be
@@ -340,7 +342,7 @@ class AssignmentLocalConnection implements AssignmentConnection {
         switch (tableName) {
             case "CodeCheckAssignments": // primary key == assignmentID
                 try {
-                    String assignmentID = obj.get("assignmentID").asText();
+                    String assignmentID = obj.get("assignmentID").asText().replaceAll("[^a-zA-Z0-9_-]", "");
                     Path assignment = child.resolve(assignmentID); // should be in the format
                                                                    // /opt/codecheck/db/CodeCheckAssignments/123456,
                                                                    // where assignmentID = 123456
@@ -352,7 +354,7 @@ class AssignmentLocalConnection implements AssignmentConnection {
                 }
             case "CodeCheckLTICredentials": // primary key == oauth_consumer_key
                 try {
-                    String oauthConsumerKey = obj.get("oauth_consumer_key").asText();
+                    String oauthConsumerKey = obj.get("oauth_consumer_key").asText().replaceAll("[^a-zA-Z0-9_-]", "");
                     Path credentials = child.resolve(oauthConsumerKey);
                     Files.writeString(credentials, obj.toString());
 
@@ -362,7 +364,7 @@ class AssignmentLocalConnection implements AssignmentConnection {
                 }
             case "CodeCheckLTIResources": // primary key == resourceID
                 try {
-                    String resourceID = obj.get("resourceID").asText();
+                    String resourceID = obj.get("resourceID").asText().replaceAll("[^a-zA-Z0-9_-]", "");
                     Path resource = child.resolve(resourceID);
                     Files.writeString(resource, obj.toString());
 
@@ -372,23 +374,27 @@ class AssignmentLocalConnection implements AssignmentConnection {
                 }
             case "CodeCheckSubmissions": // primary key == submissionID, sortKey == submittedAt
                 try {
-                    String submissionID = obj.get("submissionID").asText();
+                    String submissionID = obj.get("submissionID").asText().replaceAll("[^a-zA-Z0-9_-]", "");
+                    String submittedAt = obj.get("submittedAt").toString().replaceAll("[^a-zA-Z0-9_-]", "");
                     Path submission = child.resolve(submissionID);
+                    Util.deleteDirectory(submission); // Delete any prior contents 
                     Files.createDirectory(submission);
-                    String submittedAt = obj.get("submittedAt").toString();
-                    Path submitted = submission.resolve(submissionID);
+                    Path submitted = submission.resolve(submittedAt);
                     Files.writeString(submitted, obj.toString());
-
                     break;
                 } catch (IOException ex) {
                     logger.warn("SubmissionID not found.");
                 }
             case "CodeCheckWork": // primary key == assignmentID, sortkey == workID
                 try {
-                    String assignmentID = obj.get("assignmentID").asText();
+                    String assignmentID = obj.get("assignmentID").asText().replaceAll("[^a-zA-Z0-9_-]", "");
+                    String workID = obj.get("workID").toString().replaceAll("[^a-zA-Z0-9_-]", "");
                     Path assignment = child.resolve(assignmentID);
-                    Files.createDirectory(assignment);
-                    String workID = obj.get("workID").toString();
+                    if(!Files.exists(assignment)) {
+                        Files.createDirectory(assignment);
+                    }
+                    
+                    
                     Path work = assignment.resolve(workID);
                     Files.writeString(work, obj.toString());
 
@@ -403,6 +409,94 @@ class AssignmentLocalConnection implements AssignmentConnection {
     }
     
     public boolean writeNewerJsonObjectToDynamoDB(String tableName, ObjectNode obj, String primaryKeyName, String timeStampKeyName) {
-        return false;
+        String fileData = new String();
+        final String configVal = config.getString("com.horstmann.codecheck.db");
+        Path base = Path.of(configVal);
+        Path codeCheckWork = base.resolve("CodeCheckWork"); // /opt/codecheck/db/CodeCheckWork
+
+        // Read existing file of the form CodeCheckWork/assignmentID/workID
+        if (Files.isDirectory(codeCheckWork)) {
+            // Get sub-directories of CodeCheckWork directory (should only be the
+            // assignmentID sub-directory)
+            try(Stream <Path> entries = Files.list(codeCheckWork)){
+                List<Path> directories = entries.filter(Files::isDirectory).collect(Collectors.toList());
+                for (Path file: directories) {
+                    try {
+                        fileData = Files.readString(file);
+                    } catch (IOException ex) {
+                        logger.warn("WorkID file could not be read.");
+                    }
+                }
+            } catch(IOException ex){
+                logger.warn(ex.getMessage());
+            }
+        }
+        else {
+            logger.warn("CodeCheckWork directory does not exist.");
+            return false;
+        }
+
+        // Get timeStampKeyName val from read in file data
+        String[] fileArray = fileData.split(",");
+        String prevTimeStampVal = new String();
+        for (int i = 0; i < fileArray.length; i++) {
+            String[] items = fileArray[i].split(":");
+            if (items[0].equals("timeStampKeyName")) { // Key
+                prevTimeStampVal = items[1]; // val
+            }
+        }
+        // String newTimeStampKeyVal = obj.get(timeStampKeyName).asText();
+
+        // Compare both timeStampKeyVals
+        try {
+            Path child = base.resolve(tableName);
+            Path path = child.resolve(primaryKeyName);
+            writeFileToNewestTimeStamp(path, obj, timeStampKeyName, prevTimeStampVal);
+        } catch (Exception ex) {
+            logger.warn("There was an error writing the newer JSON object to a file.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private void writeFileToNewestTimeStamp(Path path, ObjectNode obj, String newTimeStampKeyName,
+                                            String prevTimeStampVal) throws IOException{
+        String newTimeStampVal = new String();
+        boolean done = false;
+        while (!done) {
+            try {
+                FileChannel channel = FileChannel.open(path, StandardOpenOption.READ, StandardOpenOption.WRITE,
+                        StandardOpenOption.CREATE);
+                try {
+                    try (FileLock lock = channel.lock()) {
+                        ByteBuffer readBuffer = ByteBuffer.allocate((int) channel.size());
+                        channel.read(readBuffer);
+                        String jsonString = new String(readBuffer.array());
+                        // if jsonString is not empty, convert to JSON and read the timeStampKeyName
+                        if (!jsonString.isEmpty()) {
+                            JSONParser parser = new JSONParser();
+                            JSONObject json = (JSONObject) parser.parse(jsonString);
+                            newTimeStampVal = (String) json.get(newTimeStampKeyName);
+                        }
+                        // if jsonString is empty or that timeStampKeyName is older, write file like this
+                        if (jsonString.isEmpty() || newTimeStampVal.compareTo(prevTimeStampVal) < 0) {
+                            channel.truncate(0);
+                            ByteBuffer writeBuffer = ByteBuffer.wrap(obj.toString().getBytes());
+                            channel.write(writeBuffer);
+                        }
+                        done = true;
+                    }
+                } catch (Exception ex) {
+                    try {
+                        Thread.sleep(1000);
+                    } catch (InterruptedException ex2) {
+                    }
+                }
+            } catch (IOException ex) {
+                logger.warn("There was an error in the writeFileToNewestTimeStamp function. Error message: " + ex.getMessage());
+                done = true;
+            }
+        }
     }
 }

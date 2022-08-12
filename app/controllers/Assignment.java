@@ -113,13 +113,7 @@ public class Assignment extends Controller {
                 String qid = null;
                 boolean checked = false;
                 if (problemDescriptor.startsWith("https")) problemURL = problemDescriptor;
-                else if (problemDescriptor.startsWith("http")) {
-                    if (!problemDescriptor.startsWith("http://localhost") && !problemDescriptor.startsWith("http://127.0.0.1")) {
-                        problemURL = "https" + problemDescriptor.substring(4);
-                    }
-                    else
-                        problemURL = problemDescriptor;                    
-                }   
+                else if (problemDescriptor.startsWith("http")) problemURL = "https" + problemDescriptor.substring(4);
                 else if (problemDescriptor.matches("[a-zA-Z0-9_]+(-[a-zA-Z0-9_]+)*")) { 
                     qid = problemDescriptor;
                     problemURL = "https://www.interactivities.ws/" + problemDescriptor + ".xhtml";
@@ -402,6 +396,7 @@ public class Assignment extends Controller {
             submissionNode.put("score", problemsNode.get(problemID).get("score").asDouble());
             s3conn.writeJsonObjectToDynamoDB("CodeCheckSubmissions", submissionNode);
             
+            
             if (assignmentNode.has("deadline")) {
                 try {
                     Instant deadline = Instant.parse(assignmentNode.get("deadline").asText());
@@ -412,7 +407,7 @@ public class Assignment extends Controller {
                 }
             }
             result.put("submittedAt", now.toString());      
-    
+            s3conn.writeJsonObjectToDynamoDB("CodeCheckWork", requestNode); // debug
             s3conn.writeNewerJsonObjectToDynamoDB("CodeCheckWork", requestNode, "assignmentID", "submittedAt");
             return ok(result);
         } catch (Exception e) {
